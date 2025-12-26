@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   ArrowLeft,
   Brush,
@@ -32,7 +33,17 @@ import {
   ChevronDown,
   PenTool
 } from 'lucide-react';
-import { Stage, Layer, Line, Rect, Ellipse, Image as KonvaImage, Group } from 'react-konva';
+
+// Importaciones dinámicas de Konva para evitar errores de SSR
+const Stage = dynamic(() => import('react-konva').then((mod) => mod.Stage), { ssr: false });
+const Layer = dynamic(() => import('react-konva').then((mod) => mod.Layer), { ssr: false });
+const Line = dynamic(() => import('react-konva').then((mod) => mod.Line), { ssr: false });
+const Rect = dynamic(() => import('react-konva').then((mod) => mod.Rect), { ssr: false });
+const Ellipse = dynamic(() => import('react-konva').then((mod) => mod.Ellipse), { ssr: false });
+const KonvaImage = dynamic(() => import('react-konva').then((mod) => mod.Image), { ssr: false });
+const Group = dynamic(() => import('react-konva').then((mod) => mod.Group), { ssr: false });
+
+// Tipos de Konva (solo tipos, no ejecutan código)
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { Image as KonvaImageType } from 'konva/lib/shapes/Image';
 import type { Layer as KonvaLayerType } from 'konva/lib/Layer';
