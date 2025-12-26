@@ -35,13 +35,34 @@ import {
 } from 'lucide-react';
 
 // Importaciones dinámicas de Konva para evitar errores de SSR
-const Stage = dynamic(() => import('react-konva').then((mod) => mod.Stage), { ssr: false });
-const Layer = dynamic(() => import('react-konva').then((mod) => mod.Layer), { ssr: false });
-const Line = dynamic(() => import('react-konva').then((mod) => mod.Line), { ssr: false });
-const Rect = dynamic(() => import('react-konva').then((mod) => mod.Rect), { ssr: false });
-const Ellipse = dynamic(() => import('react-konva').then((mod) => mod.Ellipse), { ssr: false });
-const KonvaImage = dynamic(() => import('react-konva').then((mod) => mod.Image), { ssr: false });
-const Group = dynamic(() => import('react-konva').then((mod) => mod.Group), { ssr: false });
+const Stage = dynamic(() => import('react-konva').then((mod) => mod.Stage), { 
+  ssr: false,
+  loading: () => <div></div>
+});
+const Layer = dynamic(() => import('react-konva').then((mod) => mod.Layer), { 
+  ssr: false,
+  loading: () => <div></div>
+});
+const Line = dynamic(() => import('react-konva').then((mod) => mod.Line), { 
+  ssr: false,
+  loading: () => <div></div>
+});
+const Rect = dynamic(() => import('react-konva').then((mod) => mod.Rect), { 
+  ssr: false,
+  loading: () => <div></div>
+});
+const Ellipse = dynamic(() => import('react-konva').then((mod) => mod.Ellipse), { 
+  ssr: false,
+  loading: () => <div></div>
+});
+const KonvaImage = dynamic(() => import('react-konva').then((mod) => mod.Image), { 
+  ssr: false,
+  loading: () => <div></div>
+});
+const Group = dynamic(() => import('react-konva').then((mod) => mod.Group), { 
+  ssr: false,
+  loading: () => <div></div>
+});
 
 // Tipos de Konva (solo tipos, no ejecutan código)
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -935,7 +956,8 @@ export default function DibujoPage() {
     [],
   );
 
-  if (!mounted) {
+  // No renderizar nada hasta que esté montado en el cliente
+  if (!mounted || typeof window === 'undefined') {
     return (
       <main className="fixed inset-0 w-screen h-screen overflow-hidden bg-[#0b132b] text-slate-200 flex items-center justify-center font-sans">
         <div className="text-center">
