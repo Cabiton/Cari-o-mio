@@ -81,6 +81,9 @@ const clearCanvas = (canvas: HTMLCanvasElement | null) => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 };
 
+// Configuración de segmento - forzar renderizado dinámico
+export const runtime = 'nodejs';
+
 export default function DibujoPage() {
   const [mounted, setMounted] = useState(false);
   const stageRef = useRef<any>(null);
