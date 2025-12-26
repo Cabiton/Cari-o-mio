@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-white text-gray-900;
+  }
+}
+
+@layer components {
+  .gradient-pink-purple {
+    background: linear-gradient(135deg, #fdf6f9 0%, #ffeef2 50%, #fbeaff 100%);
+  }
+
+  .glass-effect {
+    @apply backdrop-blur-md bg-white/30 border border-white/20 shadow-xl;
+  }
+
+  .btn-pill {
+    @apply px-3 py-2 rounded-full bg-white/70 hover:bg-white/90 border border-white/40 text-gray-800 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm;
+  }
+
+  .btn-strong {
+    @apply px-4 py-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold shadow-lg hover:from-pink-600 hover:to-purple-600 transition-all flex items-center gap-2;
+  }
+
+  .btn-ghost {
+    @apply px-3 py-2 rounded-lg bg-white/70 border border-white/60 text-gray-800 hover:bg-white/90 transition-all flex items-center gap-2;
+  }
+
+  .panel-elevated {
+    @apply glass-effect rounded-3xl border border-white/50 shadow-[0_25px_80px_rgba(15,23,42,0.12)] relative overflow-hidden;
+  }
+
+  .panel-elevated::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(236,72,153,0.14), rgba(99,102,241,0.12), rgba(45,212,191,0.12));
+    opacity: 0.65;
+    pointer-events: none;
+    filter: blur(32px);
+  }
+
+  .chip-soft {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-white/60 text-xs font-semibold text-slate-700 shadow-sm;
+  }
+
+  .stage-shell {
+    position: relative;
+    background: radial-gradient(circle at 20% 20%, rgba(236,72,153,0.12), transparent 32%), radial-gradient(circle at 80% 30%, rgba(59,130,246,0.12), transparent 38%), linear-gradient(145deg, rgba(255,255,255,0.9), rgba(248,250,252,0.9));
+    box-shadow: 0 20px 60px rgba(15,23,42,0.12), inset 0 0 0 1px rgba(255,255,255,0.7);
+  }
+
+  .stage-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.5), transparent 35%);
+  }
+
+  .tilt-card {
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .tilt-card:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 18px 45px rgba(99,102,241,0.18);
+  }
+
+  .grid-ambient {
+    background-image: linear-gradient(to right, rgba(15,23,42,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.06) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: radial-gradient(circle at center, rgba(0,0,0,0.8), transparent 70%);
+    animation: slow-pan 16s linear infinite;
+  }
+
+  .aurora-ribbon {
+    position: absolute;
+    inset: -40%;
+    background: conic-gradient(from 120deg, rgba(236,72,153,0.18), rgba(129,140,248,0.22), rgba(45,212,191,0.2), rgba(236,72,153,0.18));
+    filter: blur(100px);
+    opacity: 0.7;
+    animation: aurora-shift 18s linear infinite;
+  }
+
+  .floating-hearts {
+    animation: float 6s ease-in-out infinite;
+  }
+}
+
+/* Animaciones personalizadas */
+@keyframes petal-fall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.6;
+  }
+}
+
+@keyframes float-up {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes bounce-gentle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(236, 72, 153, 0.6);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes rotate-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slow-pan {
+  0% {
+    background-position: 0 0, 0 0;
+  }
+  100% {
+    background-position: 42px 42px, 42px 42px;
+  }
+}
+
+@keyframes aurora-shift {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(12deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(24deg) scale(1);
+  }
+}
+
+.petal {
+  animation: petal-fall 10s linear infinite;
+}
+
+.sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+.animate-float-up {
+  animation: float-up 4s ease-out forwards;
+}
+
+.animate-bounce-gentle {
+  animation: bounce-gentle 3s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(to right, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  background-size: 1000px 100%;
+  animation: shimmer 3s infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}
+
+.animate-rotate-slow {
+  animation: rotate-slow 20s linear infinite;
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #fdf2f8;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #f472b6;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ec4899;
+}

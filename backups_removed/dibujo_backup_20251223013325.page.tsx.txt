@@ -1,0 +1,657 @@
+"use client";
+
+import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
+
+export default function DibujoPage() {
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const layersRef = useRef<Record<number, HTMLCanvasElement | null>>({});
+  const [isDrawing, setIsDrawing] = useState(false);
+  const strokeRef = useRef<{ x: number; y: number; t: number; p?: number }[]>([]);
+  const [color, setColor] = useState('#ec4899');
+  const [brushSize, setBrushSize] = useState(6);
+  const [brushOpacity, setBrushOpacity] = useState(1);
+  const [pressureFactor, setPressureFactor] = useState(1);
+  const [useCatmull, setUseCatmull] = useState(true);
+  const [canvasWidth, setCanvasWidth] = useState(1024);
+  const [canvasHeight, setCanvasHeight] = useState(768);
+  const [layers, setLayers] = useState<{ id: number; name: string; visible: boolean }[]>([
+    { id: 0, name: 'Layer 1', visible: true },
+  ]);
+  const [activeLayer, setActiveLayer] = useState(0);
+  const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
+
+  // Initialize canvas size for all layer canvases
+  useEffect(() => {
+    const dpr = window.devicePixelRatio || 1;
+    Object.values(layersRef.current).forEach((c) => {
+      if (!c) return;
+      c.width = Math.floor(canvasWidth * dpr);
+      c.height = Math.floor(canvasHeight * dpr);
+      c.style.width = `${canvasWidth}px`;
+      c.style.height = `${canvasHeight}px`;
+      const ctx = c.getContext('2d');
+      if (ctx) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+    });
+    // fill newly created layer canvases with white
+    layers.forEach(l => {
+      const c = layersRef.current[l.id];
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    });
+  }, [canvasWidth, canvasHeight, layers]);
+
+  const computeStrokeWidth = (base: number, velocity: number) => {
+    const v = Math.min(velocity * 50, 1);
+    const pressure = 1 - v * 0.7;
+    return Math.max(1, base * pressure * pressureFactor);
+  };
+
+  const computeStrokeWidthWithPressure = (base: number, velocity: number, pressure?: number) => {
+    if (pressure && pressure > 0) return Math.max(1, base * (0.4 + pressure * 0.9) * pressureFactor);
+    return computeStrokeWidth(base, velocity);
+  };
+
+  const [lockedResolution, setLockedResolution] = useState(false);
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const isApplyingHistoryRef = useRef(false);
+  const hadStrokeRef = useRef(false);
+  const [historyMeta, setHistoryMeta] = useState({ index: -1, length: 0 });
+
+  const start = (e: React.PointerEvent) => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    const p = e.pressure ?? 0;
+    strokeRef.current = [{ x, y, t: Date.now(), p }];
+    setIsDrawing(true);
+    if (!lockedResolution) setLockedResolution(true);
+    try { (e.target as Element).setPointerCapture?.(e.pointerId); } catch {}
+  };
+
+  const draw = (e: React.PointerEvent) => {
+    if (!isDrawing) return;
+    const c = canvasRef.current;
+    if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    const now = Date.now();
+    const p = e.pressure ?? 0;
+    const pts = strokeRef.current;
+    pts.push({ x, y, t: now, p });
+    hadStrokeRef.current = true;
+
+    const layerCanvas = layersRef.current[activeLayer];
+    const ctx = layerCanvas?.getContext('2d');
+    if (!ctx) return;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (useCatmull && pts.length >= 4) {
+      const seg = pts.slice(-5);
+      ctx.beginPath();
+      ctx.moveTo(seg[0].x, seg[0].y);
+      for (let i = 1; i < seg.length; i++) {
+        const prev = seg[i - 1];
+        const cur = seg[i];
+        const midX = (prev.x + cur.x) / 2;
+        const midY = (prev.y + cur.y) / 2;
+        const p0 = pts[pts.length - 2];
+        const p1 = pts[pts.length - 1];
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dt = Math.max(1, p1.t - p0.t);
+        const velocity = dist / dt;
+        const w = computeStrokeWidthWithPressure(brushSize, velocity, p1.p);
+        ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = tool === 'eraser' ? 1 : brushOpacity;
+        ctx.lineWidth = w;
+        ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+      }
+      ctx.stroke();
+    } else if (pts.length >= 2) {
+      const p0 = pts[pts.length - 2];
+      const p1 = pts[pts.length - 1];
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dt = Math.max(1, p1.t - p0.t);
+      const velocity = dist / dt;
+      const w = computeStrokeWidthWithPressure(brushSize, velocity, p1.p);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = tool === 'eraser' ? 1 : brushOpacity;
+      ctx.lineWidth = w;
+      ctx.stroke();
+    }
+  };
+
+  const pushHistorySnapshot = () => {
+    if (isApplyingHistoryRef.current) return;
+    const tmp = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    tmp.width = Math.floor(canvasWidth * dpr);
+    tmp.height = Math.floor(canvasHeight * dpr);
+    const tctx = tmp.getContext('2d');
+    if (!tctx) return;
+    tctx.fillStyle = '#ffffff';
+    tctx.fillRect(0, 0, tmp.width, tmp.height);
+    layers.forEach(l => {
+      const lc = layersRef.current[l.id];
+      if (lc && l.visible) tctx.drawImage(lc, 0, 0, tmp.width, tmp.height);
+    });
+    const data = tmp.toDataURL('image/png');
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    }
+    historyRef.current.push(data);
+    if (historyRef.current.length > 10) historyRef.current.shift();
+    historyIndexRef.current = historyRef.current.length - 1;
+    setHistoryMeta({ index: historyIndexRef.current, length: historyRef.current.length });
+  };
+
+  const loadHistoryIndex = (idx: number) => {
+    const data = historyRef.current[idx];
+    if (!data) return;
+    isApplyingHistoryRef.current = true;
+    const img = new Image();
+    img.onload = () => {
+      layers.forEach(l => {
+        const lc = layersRef.current[l.id];
+        if (!lc) return;
+        const ctx = lc.getContext('2d');
+        if (!ctx) return;
+        const dpr = window.devicePixelRatio || 1;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, lc.width, lc.height);
+        if (l.id === layers[0].id) ctx.drawImage(img, 0, 0, lc.width, lc.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      });
+      isApplyingHistoryRef.current = false;
+      historyIndexRef.current = idx;
+      setHistoryMeta({ index: historyIndexRef.current, length: historyRef.current.length });
+    };
+    img.src = data;
+  };
+
+  const undo = () => { if (historyIndexRef.current > 0) loadHistoryIndex(historyIndexRef.current - 1); };
+  const redo = () => { if (historyIndexRef.current < historyRef.current.length - 1) loadHistoryIndex(historyIndexRef.current + 1); };
+
+  const stop = (e?: React.PointerEvent) => {
+    setIsDrawing(false);
+    try { if (e) (e.target as Element).releasePointerCapture?.(e.pointerId); } catch {}
+    if (hadStrokeRef.current) { pushHistorySnapshot(); hadStrokeRef.current = false; }
+    strokeRef.current = [];
+  };
+
+  useEffect(() => { if (canvasRef.current) pushHistorySnapshot(); }, []);
+
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      const cmd = ev.ctrlKey || ev.metaKey;
+      if (!cmd) return;
+      if (ev.key.toLowerCase() === 'z') { ev.preventDefault(); if (ev.shiftKey) redo(); else undo(); }
+      else if (ev.key.toLowerCase() === 'y') { ev.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const saveImage = async () => {
+    const tmp = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    tmp.width = Math.floor(canvasWidth * dpr);
+    tmp.height = Math.floor(canvasHeight * dpr);
+    const tctx = tmp.getContext('2d');
+    if (!tctx) return;
+    tctx.fillStyle = '#ffffff';
+    tctx.fillRect(0, 0, tmp.width, tmp.height);
+    layers.forEach(l => {
+      const lc = layersRef.current[l.id];
+      if (lc && l.visible) tctx.drawImage(lc, 0, 0, tmp.width, tmp.height);
+    });
+    tmp.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dibujo-${Date.now()}.jpg`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/jpeg', 0.9);
+  };
+
+  const clearActiveLayer = () => {
+    const lc = layersRef.current[activeLayer];
+    if (!lc) return;
+    const ctx = lc.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, lc.width, lc.height);
+    ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    pushHistorySnapshot();
+  };
+
+  const clearAllLayers = () => {
+    layers.forEach(l => {
+      const lc = layersRef.current[l.id];
+      if (!lc) return;
+      const ctx = lc.getContext('2d');
+      if (!ctx) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, lc.width, lc.height);
+      ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    });
+    pushHistorySnapshot();
+  };
+
+  const clearHistory = () => { historyRef.current = []; historyIndexRef.current = -1; setHistoryMeta({ index: -1, length: 0 }); pushHistorySnapshot(); };
+  const addLayer = () => { const id = Date.now(); setLayers(prev => [...prev, { id, name: `Layer ${prev.length + 1}`, visible: true }]); setActiveLayer(id); };
+  const removeLayer = (id: number) => { if (layers.length <= 1) return; setLayers(prev => prev.filter(l => l.id !== id)); if (activeLayer === id) setActiveLayer(layers[0].id); };
+  const toggleLayerVisibility = (id: number) => setLayers(prev => prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
+
+  return (
+    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+      <div className="w-full max-w-5xl bg-white rounded-xl shadow-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <Link href="/main" className="text-pink-600 hover:text-pink-800"> <ArrowLeft /> </Link>
+            <h2 className="text-2xl font-bold">Lienzo</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={undo} disabled={historyMeta.index <= 0} className="px-3 py-2 bg-gray-200 text-gray-800 rounded">Deshacer</button>
+            <button onClick={redo} disabled={historyMeta.index >= historyMeta.length - 1} className="px-3 py-2 bg-gray-200 text-gray-800 rounded">Rehacer</button>
+            <button onClick={saveImage} className="px-3 py-2 bg-green-600 text-white rounded flex items-center gap-2">Guardar</button>
+            <button onClick={saveImage} className="px-3 py-2 bg-pink-600 text-white rounded flex items-center gap-2">Exportar</button>
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <div className="w-72 space-y-4">
+            <div>
+              <label className="text-sm">Color</label>
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-10" />
+            </div>
+            <div>
+              <label className="text-sm">Grosor: {brushSize}px</label>
+              <input type="range" min={1} max={60} value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className="w-full" />
+            </div>
+            <div>
+              <label className="text-sm">Opacidad: {Math.round(brushOpacity*100)}%</label>
+              <input type="range" min={0} max={1} step={0.01} value={brushOpacity} onChange={(e) => setBrushOpacity(Number(e.target.value))} className="w-full" />
+            </div>
+            <div>
+              <label className="text-sm">Presión: {pressureFactor.toFixed(2)}x</label>
+              <input type="range" min={0.4} max={1.6} step={0.01} value={pressureFactor} onChange={(e) => setPressureFactor(Number(e.target.value))} className="w-full" />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm">Suavizado</label>
+              <button onClick={() => setUseCatmull(!useCatmull)} className={`px-3 py-1 rounded ${useCatmull ? 'bg-pink-600 text-white' : 'bg-gray-200'}`}>{useCatmull ? 'Catmull' : 'Quadratic'}</button>
+            </div>
+          </div>
+
+          <div className="flex-1">
+            <div className="border rounded bg-white p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <button onClick={() => setTool('brush')} className={`px-3 py-1 rounded ${tool === 'brush' ? 'bg-pink-600 text-white' : 'bg-gray-200'}`}>Pincel</button>
+                <button onClick={() => setTool('eraser')} className={`px-3 py-1 rounded ${tool === 'eraser' ? 'bg-pink-600 text-white' : 'bg-gray-200'}`}>Borrador</button>
+                <button onClick={clearActiveLayer} className="px-3 py-1 rounded bg-gray-200">Limpiar capa</button>
+                <button onClick={clearAllLayers} className="px-3 py-1 rounded bg-gray-200">Limpiar todo</button>
+                <button onClick={clearHistory} className="px-3 py-1 rounded bg-gray-200">Limpiar historial</button>
+              </div>
+
+              <div ref={canvasRef} className="relative mx-auto" style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}>
+                {layers.map((l, idx) => (
+                  <canvas
+                    key={l.id}
+                    ref={(el) => { layersRef.current[l.id] = el; }}
+                    onPointerDown={start}
+                    onPointerMove={draw}
+                    onPointerUp={stop}
+                    onPointerLeave={stop}
+                    onPointerCancel={stop}
+                    className={`absolute inset-0 w-full h-full ${l.visible ? '' : 'hidden'}`}
+                    style={{ zIndex: idx + 1, background: '#fff' }}
+                  />
+                ))}
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <button onClick={addLayer} className="px-3 py-1 bg-gray-200 rounded">Añadir capa</button>
+                <button onClick={() => removeLayer(activeLayer)} className="px-3 py-1 bg-gray-200 rounded">Eliminar capa</button>
+                <div className="ml-4">
+                  <label className="text-sm">Ancho</label>
+                  <input type="number" value={canvasWidth} onChange={(e) => setCanvasWidth(Number(e.target.value))} className="w-24 ml-2" />
+                </div>
+                <div>
+                  <label className="text-sm">Alto</label>
+                  <input type="number" value={canvasHeight} onChange={(e) => setCanvasHeight(Number(e.target.value))} className="w-24 ml-2" />
+                </div>
+                <button onClick={() => {
+                  if (lockedResolution) { alert('La resolución ya fue fijada y no se puede cambiar.'); return; }
+                  if (!confirm('Cambiar la resolución redimensionará los canvases. ¿Continuar?')) return;
+                }} className="px-3 py-1 bg-pink-600 text-white rounded ml-2">Aplicar tamaño</button>
+              </div>
+
+              <div className="mt-4">
+                <h4 className="font-semibold">Capas</h4>
+                <div className="flex flex-col gap-2 mt-2">
+                  {layers.map(l => (
+                    <div key={l.id} className="flex items-center gap-2">
+                      <input type="radio" name="activeLayer" checked={activeLayer === l.id} onChange={() => setActiveLayer(l.id)} />
+                      <span className="flex-1">{l.name}</span>
+                      <button onClick={() => toggleLayerVisibility(l.id)} className="px-2 py-1 bg-gray-200 rounded">{l.visible ? 'Visible' : 'Oculto'}</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+"use client";
+
+import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
+
+export default function DibujoPage() {
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const layersRef = useRef<Record<number, HTMLCanvasElement | null>>({});
+  const [isDrawing, setIsDrawing] = useState(false);
+  const strokeRef = useRef<{ x: number; y: number; t: number; p?: number }[]>([]);
+  const [color, setColor] = useState('#ec4899');
+  const [brushSize, setBrushSize] = useState(6);
+  const [brushOpacity, setBrushOpacity] = useState(1);
+  const [pressureFactor, setPressureFactor] = useState(1);
+  const [useCatmull, setUseCatmull] = useState(true);
+  const [canvasWidth, setCanvasWidth] = useState(1024);
+  const [canvasHeight, setCanvasHeight] = useState(768);
+  const [layers, setLayers] = useState<{ id: number; name: string; visible: boolean }[]>([
+    { id: 0, name: 'Layer 1', visible: true },
+  ]);
+  const [activeLayer, setActiveLayer] = useState(0);
+  const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
+
+  useEffect(() => {
+    const dpr = window.devicePixelRatio || 1;
+    Object.values(layersRef.current).forEach((c) => {
+      if (!c) return;
+      c.width = Math.floor(canvasWidth * dpr);
+      c.height = Math.floor(canvasHeight * dpr);
+      c.style.width = `${canvasWidth}px`;
+      c.style.height = `${canvasHeight}px`;
+      const ctx = c.getContext('2d');
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    });
+    layers.forEach(l => {
+      const c = layersRef.current[l.id];
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    });
+  }, [canvasWidth, canvasHeight, layers]);
+
+  const computeStrokeWidth = (base: number, velocity: number) => {
+    const v = Math.min(velocity * 50, 1);
+    const pressure = 1 - v * 0.7;
+    return Math.max(1, base * pressure * pressureFactor);
+  };
+
+  const computeStrokeWidthWithPressure = (base: number, velocity: number, pressure?: number) => {
+    if (pressure && pressure > 0) return Math.max(1, base * (0.4 + pressure * 0.9) * pressureFactor);
+    return computeStrokeWidth(base, velocity);
+  };
+
+  const [lockedResolution, setLockedResolution] = useState(false);
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const isApplyingHistoryRef = useRef(false);
+  const hadStrokeRef = useRef(false);
+  const [historyMeta, setHistoryMeta] = useState({ index: -1, length: 0 });
+
+  const start = (e: React.PointerEvent) => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    const p = e.pressure ?? 0;
+    strokeRef.current = [{ x, y, t: Date.now(), p }];
+    setIsDrawing(true);
+    if (!lockedResolution) setLockedResolution(true);
+    try { (e.target as Element).setPointerCapture?.(e.pointerId); } catch {}
+  };
+
+  const draw = (e: React.PointerEvent) => {
+    if (!isDrawing) return;
+    const c = canvasRef.current;
+    if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    const now = Date.now();
+    const p = e.pressure ?? 0;
+    const pts = strokeRef.current;
+    pts.push({ x, y, t: now, p });
+    hadStrokeRef.current = true;
+
+    const layerCanvas = layersRef.current[activeLayer];
+    const ctx = layerCanvas?.getContext('2d');
+    if (!ctx) return;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (useCatmull && pts.length >= 4) {
+      const seg = pts.slice(-5);
+      ctx.beginPath();
+      ctx.moveTo(seg[0].x, seg[0].y);
+      for (let i = 1; i < seg.length; i++) {
+        const prev = seg[i - 1];
+        const cur = seg[i];
+        const midX = (prev.x + cur.x) / 2;
+        const midY = (prev.y + cur.y) / 2;
+        const p0 = pts[pts.length - 2];
+        const p1 = pts[pts.length - 1];
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dt = Math.max(1, p1.t - p0.t);
+        const velocity = dist / dt;
+        const w = computeStrokeWidthWithPressure(brushSize, velocity, p1.p);
+        ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = tool === 'eraser' ? 1 : brushOpacity;
+        ctx.lineWidth = w;
+        ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+      }
+      ctx.stroke();
+    } else if (pts.length >= 2) {
+      const p0 = pts[pts.length - 2];
+      const p1 = pts[pts.length - 1];
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dt = Math.max(1, p1.t - p0.t);
+      const velocity = dist / dt;
+      const w = computeStrokeWidthWithPressure(brushSize, velocity, p1.p);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = tool === 'eraser' ? 1 : brushOpacity;
+      ctx.lineWidth = w;
+      ctx.stroke();
+    }
+  };
+
+  const pushHistorySnapshot = () => {
+    if (isApplyingHistoryRef.current) return;
+    const tmp = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    tmp.width = Math.floor(canvasWidth * dpr);
+    tmp.height = Math.floor(canvasHeight * dpr);
+    const tctx = tmp.getContext('2d');
+    if (!tctx) return;
+    tctx.fillStyle = '#ffffff';
+    tctx.fillRect(0, 0, tmp.width, tmp.height);
+    layers.forEach(l => {
+      const lc = layersRef.current[l.id];
+      if (lc && l.visible) tctx.drawImage(lc, 0, 0, tmp.width, tmp.height);
+    });
+    const data = tmp.toDataURL('image/png');
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    }
+    historyRef.current.push(data);
+    if (historyRef.current.length > 10) historyRef.current.shift();
+    historyIndexRef.current = historyRef.current.length - 1;
+    setHistoryMeta({ index: historyIndexRef.current, length: historyRef.current.length });
+  };
+
+  const loadHistoryIndex = (idx: number) => {
+    const data = historyRef.current[idx];
+    if (!data) return;
+    isApplyingHistoryRef.current = true;
+    const img = new Image();
+    img.onload = () => {
+      layers.forEach(l => {
+        const lc = layersRef.current[l.id];
+        if (!lc) return;
+        const ctx = lc.getContext('2d');
+        if (!ctx) return;
+        const dpr = window.devicePixelRatio || 1;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, lc.width, lc.height);
+        if (l.id === layers[0].id) ctx.drawImage(img, 0, 0, lc.width, lc.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      });
+      isApplyingHistoryRef.current = false;
+      historyIndexRef.current = idx;
+      setHistoryMeta({ index: historyIndexRef.current, length: historyRef.current.length });
+    };
+    img.src = data;
+  };
+
+  const undo = () => { if (historyIndexRef.current > 0) loadHistoryIndex(historyIndexRef.current - 1); };
+  const redo = () => { if (historyIndexRef.current < historyRef.current.length - 1) loadHistoryIndex(historyIndexRef.current + 1); };
+
+  const stop = (e?: React.PointerEvent) => {
+    setIsDrawing(false);
+    try { if (e) (e.target as Element).releasePointerCapture?.(e.pointerId); } catch {}
+    if (hadStrokeRef.current) { pushHistorySnapshot(); hadStrokeRef.current = false; }
+    strokeRef.current = [];
+  };
+
+  useEffect(() => { if (canvasRef.current) pushHistorySnapshot(); }, []);
+
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      const cmd = ev.ctrlKey || ev.metaKey;
+      if (!cmd) return;
+      if (ev.key.toLowerCase() === 'z') { ev.preventDefault(); if (ev.shiftKey) redo(); else undo(); }
+      else if (ev.key.toLowerCase() === 'y') { ev.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const saveImage = async () => {
+    const tmp = document.createElement('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    tmp.width = Math.floor(canvasWidth * dpr);
+    tmp.height = Math.floor(canvasHeight * dpr);
+    const tctx = tmp.getContext('2d');
+    if (!tctx) return;
+    tctx.fillStyle = '#ffffff';
+    tctx.fillRect(0, 0, tmp.width, tmp.height);
+    layers.forEach(l => {
+      const lc = layersRef.current[l.id];
+      if (lc && l.visible) tctx.drawImage(lc, 0, 0, tmp.width, tmp.height);
+    });
+    tmp.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dibujo-${Date.now()}.jpg`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/jpeg', 0.9);
+  };
+
+  const clearActiveLayer = () => {
+    const lc = layersRef.current[activeLayer];
+    if (!lc) return;
+    const ctx = lc.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, lc.width, lc.height);
+    ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    pushHistorySnapshot();
+  };
+
+  const clearAllLayers = () => {
+    layers.forEach(l => {
+      const lc = layersRef.current[l.id];
+      if (!lc) return;
+      const ctx = lc.getContext('2d');
+      if (!ctx) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, lc.width, lc.height);
+      ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    });
+    pushHistorySnapshot();
+  };
+
+  const clearHistory = () => { historyRef.current = []; historyIndexRef.current = -1; setHistoryMeta({ index: -1, length: 0 }); pushHistorySnapshot(); };
+  const addLayer = () => { const id = Date.now(); setLayers(prev => [...prev, { id, name: `Layer ${prev.length + 1}`, visible: true }]); setActiveLayer(id); };
+  const removeLayer = (id: number) => { if (layers.length <= 1) return; setLayers(prev => prev.filter(l => l.id !== id)); if (activeLayer === id) setActiveLayer(layers[0].id); };
+  const toggleLayerVisibility = (id: number) => setLayers(prev => prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
+
+  return (
+    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+      <div className="w-full max-w-5xl bg-white rounded-xl shadow-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <Link href="/main" className="text-pink-600 hover:text-pink-800"> <ArrowLeft /> </Link>
+            <h2 className="text-2xl font-bold">Lienzo</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={undo} disabled={historyMeta.index <= 0} className="px-3 py-2 bg-gray-200 text-gray-800 rounded">Deshacer</button>
+            <button onClick={redo} disabled={historyMeta.index >= historyMeta.length - 1} className="px-3 py-2 bg-gray-200 text-gray-800 rounded">Rehacer</button>
+            <button onClick={saveImage} className="px-3 py-2 bg-green-600 text-white rounded flex items-center gap-2">Guardar</button>
+            <button onClick={saveImage} className="px-3 py-2 bg-pink-600 text-white rounded flex items-center gap-2">Exportar</button>
+          </div>
+        </div>
+
+... (file truncated in this message)
