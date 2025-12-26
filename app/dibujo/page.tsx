@@ -82,6 +82,7 @@ const clearCanvas = (canvas: HTMLCanvasElement | null) => {
 };
 
 export default function DibujoPage() {
+  const [mounted, setMounted] = useState(false);
   const stageRef = useRef<any>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const paintBufferRef = useRef<HTMLCanvasElement | null>(null);
@@ -99,6 +100,10 @@ export default function DibujoPage() {
   const historyRef = useRef<HistoryEntry[]>([]);
   const historyIndexRef = useRef(-1);
   const initialSnapshotDone = useRef(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [color, setColor] = useState('#ec4899');
   const [recentColors, setRecentColors] = useState<string[]>([]);
@@ -929,6 +934,17 @@ export default function DibujoPage() {
     ],
     [],
   );
+
+  if (!mounted) {
+    return (
+      <main className="fixed inset-0 w-screen h-screen overflow-hidden bg-[#0b132b] text-slate-200 flex items-center justify-center font-sans">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mb-4"></div>
+          <p className="text-slate-400">Cargando lienzo...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="fixed inset-0 w-screen h-screen overflow-hidden bg-[#0b132b] text-slate-200 flex flex-col font-sans">

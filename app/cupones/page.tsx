@@ -23,7 +23,7 @@ export default function CuponesPage() {
     { id: 4, title: 'Vale por una sorpresa', description: 'Planeo una sorpresa especial sin que sepas nada sobre ello 🎉', icon: '🎉', color: 'from-pink-400 to-purple-400', used: 0, maxUses: 1 },
     { id: 5, title: 'Vale de te compro lo que quieras', description: 'Te compro lo que gustes (no te pases por favor) 🎀🎁', icon: '💗', color: 'from-purple-400 to-rose-400', used: 0, maxUses: 1 },
     { id: 6, title: 'Vale por hacer videollamada', description: 'Hacemos videollamada TU cuando quieras 📞', icon: '📞', color: 'from-rose-400 to-purple-400', used: 0, maxUses: 1 },
-    { id: 7, title: 'Vale por una sesión de fotos', description: 'Te tomo todas las fotos que quieras 📸', icon: '📸', color: 'from-pink-400 to-rose-400', used: 0, maxUses: 10 },
+    { id: 7, title: 'Vale por una sesión de fotos', description: 'Me tomo todas las fotos que quieras 📸', icon: '📸', color: 'from-pink-400 to-rose-400', used: 0, maxUses: 10 },
     { id: 8, title: 'Vale que te digo cualquier cosa con la verdad', description: 'Te digo lo que quieras saber 👂', icon: '👂', color: 'from-purple-400 to-pink-400', used: 0, maxUses: 1 },
     { id: 9, title: 'Vale para mostrarte un regalo que te tengo en la sección de regalos', description: 'Este será canjeable solo después del 15 de enero 🎁', icon: '🎁', color: 'from-red-400 to-pink-500', used: 0, maxUses: 1 },
   ]);
