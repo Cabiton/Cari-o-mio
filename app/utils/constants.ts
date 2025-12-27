@@ -175,8 +175,8 @@ export const SECTIONS: SectionCard[] = [
 ];
 
 export const PASSWORD = "Mi corazón";
-export const CONFIDENTIAL_PASSWORD = "Mi secreto";
-export const GIFT_PASSWORD = "bobux";
+export const CONFIDENTIAL_PASSWORD = "Todo de ti me encanta";
+export const GIFT_PASSWORD = "Es un vidio";
 
 export const SPECIAL_DATE = new Date("2025-10-13T23:00:00-05:00");
 export const START_DATE = new Date("2025-04-16T00:00:00");
