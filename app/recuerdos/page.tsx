@@ -38,7 +38,7 @@ export default function RecuerdosPage() {
               muy pronto, me refiero disponible pronto
             </p>
             <p className="text-gray-500">
-              Estamos preparando algo muy especial para ti 💕
+              Estoy preparando algo muy especial para ti cariño 💕
             </p>
           </div>
         </div>

@@ -4,153 +4,117 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft, Upload, X, Download, Trash2, Image as ImageIcon } from 'lucide-react';
-import { saveScreenshot, getAllScreenshots, deleteScreenshot, StoredScreenshot } from '../utils/idb';
 
 interface Screenshot {
   id: string;
-  dataUrl: string; // object URL
+  url: string; // URL de Cloudinary
   date: string;
   name: string;
 }
 
 export default function ScreenshotsPage() {
-  // Force refresh
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
-
   const [selectedImage, setSelectedImage] = useState<Screenshot | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const createdObjectUrls = useRef<string[]>([]);
 
+  // Cargar imágenes al montar el componente
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const items = await getAllScreenshots();
-        if (!mounted) return;
-        const mapped: Screenshot[] = items.map((it) => {
-          const url = URL.createObjectURL(it.blob);
-          createdObjectUrls.current.push(url);
-          return {
-            id: it.id,
-            name: it.name,
-            date: it.date,
-            dataUrl: url,
-          };
-        });
-        setScreenshots(mapped);
-      } catch (err) {
-        console.error('Error cargando screenshots desde IDB', err);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-      createdObjectUrls.current.forEach((u) => URL.revokeObjectURL(u));
-      createdObjectUrls.current = [];
-    };
+    loadScreenshots();
   }, []);
+
+  const loadScreenshots = async () => {
+    try {
+      const response = await fetch('/api/screenshots/list');
+      const data = await response.json();
+      
+      if (data.success) {
+        setScreenshots(data.images);
+      } else {
+        console.error('Error al cargar imágenes:', data.error);
+      }
+    } catch (err) {
+      console.error('Error al cargar screenshots:', err);
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
 
-    setError(''); // Limpiar error anterior
+    setError('');
     setLoading(true);
 
-    const newScreenshots: Screenshot[] = [];
-    const maxFileSize = 5 * 1024 * 1024; // 5MB por archivo (aumentado)
-    const maxScreenshots = 50; // Máximo 50 capturas (aumentado)
+    try {
+      const formData = new FormData();
+      
+      // Agregar todos los archivos al FormData
+      Array.from(files).forEach((file) => {
+        if (file.type.startsWith('image/')) {
+          formData.append('files', file);
+        }
+      });
 
-    if (screenshots.length + Array.from(files).length > maxScreenshots) {
-      setError(`No puedes subir más de ${maxScreenshots} capturas. Elimina algunas para agregar nuevas.`);
+      // Subir a la API
+      const response = await fetch('/api/screenshots/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Recargar la lista de imágenes
+        await loadScreenshots();
+      } else {
+        setError(data.error || 'Error al subir las imágenes');
+      }
+    } catch (err) {
+      console.error('Error al subir archivos:', err);
+      setError('Error al subir las imágenes');
+    } finally {
       setLoading(false);
-      return;
-    }
-
-    // Procesar archivos secuencialmente para evitar sobrecarga
-    for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue;
-
-      if (file.size > maxFileSize) {
-        setError(`El archivo ${file.name} es demasiado grande. Máximo 5MB por imagen.`);
-        setLoading(false);
-        return; // Detener si hay un archivo demasiado grande
-      }
-
-      try {
-        const id = Date.now().toString() + Math.random();
-        const date = new Date().toLocaleDateString('es-ES', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        });
-
-        // Save file blob directly to IndexedDB
-        const record: StoredScreenshot = {
-          id,
-          name: file.name,
-          date,
-          blob: file,
-        };
-        await saveScreenshot(record);
-
-        const objectUrl = URL.createObjectURL(file);
-        createdObjectUrls.current.push(objectUrl);
-
-        const newScreenshot: Screenshot = {
-          id,
-          dataUrl: objectUrl,
-          date,
-          name: file.name,
-        };
-        newScreenshots.push(newScreenshot);
-      } catch (err) {
-        console.error('Error saving file to IDB', err);
-        setError(`Error al guardar el archivo ${file.name}.`);
-        setLoading(false);
-        return;
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
     }
-
-    if (newScreenshots.length > 0) {
-      const updated = [...screenshots, ...newScreenshots];
-      setScreenshots(updated);
-    }
-
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-    setLoading(false);
   };
 
-  // Eliminar captura (activa)
+  // Eliminar captura
   const handleDelete = async (id: string) => {
     if (!confirm('¿Estás segura de que quieres eliminar esta captura?')) return;
+    
     try {
-      await deleteScreenshot(id);
-      const updated = screenshots.filter((s) => s.id !== id);
-      setScreenshots(updated);
-      setSelectedImage(null);
+      const response = await fetch(`/api/screenshots/delete?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Recargar la lista
+        await loadScreenshots();
+        setSelectedImage(null);
+      } else {
+        setError(data.error || 'Error al eliminar la captura');
+      }
     } catch (err) {
-      console.error('Error deleting screenshot', err);
-      setError('Error al eliminar la captura.');
+      console.error('Error al eliminar screenshot:', err);
+      setError('Error al eliminar la captura');
     }
   };
 
-  const downloadScreenshot = async (screenshot: Screenshot) => {
+  const downloadScreenshot = (screenshot: Screenshot) => {
     try {
-      // Try to get blob from IDB to ensure download of original file
-      // Fallback to current object URL
       const link = document.createElement('a');
-      link.href = screenshot.dataUrl;
+      link.href = screenshot.url;
       link.download = screenshot.name || 'screenshot.png';
+      link.target = '_blank';
       link.click();
     } catch (err) {
-      console.error('Error downloading', err);
-      setError('Error al descargar la imagen.');
+      console.error('Error al descargar:', err);
+      setError('Error al descargar la imagen');
     }
   };
 
@@ -225,7 +189,7 @@ export default function ScreenshotsPage() {
               >
                 <div className="aspect-[9/16] relative overflow-hidden bg-gray-100">
                   <Image
-                    src={screenshot.dataUrl}
+                    src={screenshot.url}
                     alt={screenshot.name}
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
@@ -259,7 +223,7 @@ export default function ScreenshotsPage() {
           <div className="max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="relative w-full h-full min-h-[320px] flex-1">
               <Image
-                src={selectedImage.dataUrl}
+                src={selectedImage.url}
                 alt={selectedImage.name}
                 fill
                 sizes="100vw"
