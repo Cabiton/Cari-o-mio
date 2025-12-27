@@ -61,12 +61,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
-// Aumentar el límite de tamaño de body
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-    },
-  },
-};
