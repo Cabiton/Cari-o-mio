@@ -10,12 +10,25 @@ cloudinary.config({
 
 export async function GET(req: NextRequest) {
   try {
+    console.log('📋 Obteniendo lista de screenshots...');
+    
+    // Verificar configuración de Cloudinary
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      console.error('❌ Variables de entorno de Cloudinary no configuradas');
+      return NextResponse.json(
+        { error: 'Cloudinary no está configurado' },
+        { status: 500 }
+      );
+    }
+
     // Obtener todas las imágenes de la carpeta 'screenshots'
     const result = await cloudinary.api.resources({
       type: 'upload',
       prefix: 'screenshots/',
-      max_results: 500, // Sin límite práctico
+      max_results: 500,
     });
+
+    console.log(`📸 Encontradas ${result.resources.length} imágenes`);
 
     const images = result.resources.map((resource: any) => ({
       id: resource.public_id,
@@ -33,9 +46,9 @@ export async function GET(req: NextRequest) {
       images,
     });
   } catch (error) {
-    console.error('Error al obtener imágenes de Cloudinary:', error);
+    console.error('❌ Error al obtener imágenes de Cloudinary:', error);
     return NextResponse.json(
-      { error: 'Error al obtener las imágenes' },
+      { error: `Error al obtener las imágenes: ${error instanceof Error ? error.message : 'Error desconocido'}` },
       { status: 500 }
     );
   }

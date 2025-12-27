@@ -47,16 +47,35 @@ export default function ScreenshotsPage() {
     setLoading(true);
 
     try {
-      const formData = new FormData();
+      // Crear vistas previas locales inmediatas
+      const localPreviews: Screenshot[] = [];
+      for (const file of Array.from(files)) {
+        if (file.type.startsWith('image/')) {
+          const objectUrl = URL.createObjectURL(file);
+          localPreviews.push({
+            id: `temp-${Date.now()}-${Math.random()}`,
+            url: objectUrl,
+            name: file.name,
+            date: new Date().toLocaleDateString('es-ES', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }),
+          });
+        }
+      }
       
-      // Agregar todos los archivos al FormData
+      // Mostrar inmediatamente las imágenes
+      setScreenshots(prev => [...prev, ...localPreviews]);
+
+      // Subir a Cloudinary en segundo plano
+      const formData = new FormData();
       Array.from(files).forEach((file) => {
         if (file.type.startsWith('image/')) {
           formData.append('files', file);
         }
       });
 
-      // Subir a la API
       const response = await fetch('/api/screenshots/upload', {
         method: 'POST',
         body: formData,
@@ -65,14 +84,24 @@ export default function ScreenshotsPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Recargar la lista de imágenes
-        await loadScreenshots();
+        // Reemplazar las vistas previas temporales con las URLs de Cloudinary
+        setScreenshots(prev => {
+          // Eliminar las temporales
+          const filtered = prev.filter(s => !s.id.startsWith('temp-'));
+          // Agregar las de Cloudinary
+          return [...filtered, ...data.images];
+        });
+        
+        // Limpiar object URLs temporales
+        localPreviews.forEach(p => URL.revokeObjectURL(p.url));
       } else {
-        setError(data.error || 'Error al subir las imágenes');
+        // Si falla, mantener las vistas previas locales
+        console.error('Error al subir a Cloudinary:', data.error);
+        setError('Imágenes cargadas localmente. Error al sincronizar con la nube.');
       }
     } catch (err) {
       console.error('Error al subir archivos:', err);
-      setError('Error al subir las imágenes');
+      setError('Imágenes cargadas localmente. Error de conexión.');
     } finally {
       setLoading(false);
       if (fileInputRef.current) {
