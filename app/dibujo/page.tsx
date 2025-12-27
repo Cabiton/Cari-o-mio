@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
   ArrowLeft,
@@ -85,6 +86,13 @@ const clearCanvas = (canvas: HTMLCanvasElement | null) => {
 export const runtime = 'nodejs';
 
 export default function DibujoPage() {
+  const router = useRouter();
+  
+  // Bloquear acceso temporalmente
+  useEffect(() => {
+    router.push('/main');
+  }, [router]);
+
   const [mounted, setMounted] = useState(false);
   const stageRef = useRef<any>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
